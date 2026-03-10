@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.OpenApi;                 // enables .WithOpenApi() on
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.FileProviders;
 using CorporateCupPredictor;                       // your DbContext + models
+using Microsoft.Data.Sqlite;                       // for SqliteConnectionStringBuilder in backup endpoint
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -44,6 +45,15 @@ builder.Services.AddCors(options =>
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection")
         ?? "Data Source=corporatecup.db"));
+
+// ---------------------------
+// Startup guard: ensure prod DB lives on the Railway volume (/app)
+// ---------------------------
+var cs = builder.Configuration.GetConnectionString("DefaultConnection");
+if (builder.Environment.IsProduction() && (string.IsNullOrWhiteSpace(cs) || !cs.Contains("/app/", StringComparison.Ordinal)))
+{
+    throw new InvalidOperationException("ERROR: Production must use the /app volume for SQLite. Deployment aborted.");
+}
 
 var app = builder.Build();
 
@@ -237,6 +247,55 @@ app.MapDelete("/api/entries/{id:int}", async (int id, AppDbContext db) =>
 })
 .WithName("DeleteEntry")
 .WithTags("Entries")
+.WithOpenApi();
+
+// ---------------------------
+// Admin: on-demand SQLite backup (unauthenticated for now)
+// ---------------------------
+app.MapPost("/admin/backup", (IConfiguration config) =>
+{
+    // Get the current DB file path from the connection string
+    var conn = config.GetConnectionString("DefaultConnection") ?? "Data Source=corporatecup.db";
+    var csb = new SqliteConnectionStringBuilder(conn);
+    var dbPath = csb.DataSource;
+
+    if (string.IsNullOrWhiteSpace(dbPath))
+    {
+        return Results.BadRequest(new { message = "Could not determine database path from connection string." });
+    }
+
+    // Resolve to absolute path (in prod this should already be /app/...)
+    if (!Path.IsPathRooted(dbPath))
+    {
+        dbPath = Path.GetFullPath(dbPath);
+    }
+
+    if (!System.IO.File.Exists(dbPath))
+    {
+        return Results.NotFound(new { message = $"Database file not found at '{dbPath}'." });
+    }
+
+    // backups directory beside the DB file
+    var dbDir = Path.GetDirectoryName(dbPath) ?? ".";
+    var backupsDir = Path.Combine(dbDir, "backups");
+    Directory.CreateDirectory(backupsDir);
+
+    var timestamp = DateTime.UtcNow.ToString("yyyyMMdd-HHmm");
+    var backupFileName = $"corporatecup-{timestamp}.db";
+    var backupPath = Path.Combine(backupsDir, backupFileName);
+
+    // Simple file copy backup (consistent enough for small SQLite dbs)
+    System.IO.File.Copy(dbPath, backupPath, overwrite: true);
+
+    return Results.Ok(new
+    {
+        message = "Backup created",
+        databasePath = dbPath,
+        backupPath
+    });
+})
+.WithName("CreateBackup")
+.WithTags("Admin")
 .WithOpenApi();
 
 // ---------------------------
