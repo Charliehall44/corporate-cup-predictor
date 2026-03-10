@@ -24,8 +24,11 @@ jobs:
         working-directory: frontend
         run: npm install
 
+      # 🔧 Inject the API base URL (no trailing slash, no /api at the end)
       - name: Build frontend
         working-directory: frontend
+        env:
+          VITE_API_URL: https://corporate-cup-predictor-copy-1-production.up.railway.app
         run: npm run build
 
       - name: Publish to backend/wwwroot
