@@ -50,9 +50,34 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 // Startup guard: ensure prod DB lives on the Railway volume (/app)
 // ---------------------------
 var cs = builder.Configuration.GetConnectionString("DefaultConnection");
-if (builder.Environment.IsProduction() && (string.IsNullOrWhiteSpace(cs) || !cs.Contains("/app/", StringComparison.Ordinal)))
+
+// Production safety checks
+if (builder.Environment.IsProduction())
 {
-    throw new InvalidOperationException("ERROR: Production must use the /app volume for SQLite. Deployment aborted.");
+    if (string.IsNullOrWhiteSpace(cs))
+        throw new InvalidOperationException("ERROR: No production DB connection string configured.");
+
+    // Enforce that prod DB is on a mounted volume path (/data recommended)
+    var onMountedVolume =
+        cs.Contains("/data/", StringComparison.Ordinal) ||
+        cs.Contains("/app/", StringComparison.Ordinal); // allow /app too if you ever go back
+
+    if (!onMountedVolume)
+        throw new InvalidOperationException("ERROR: Production DB must be on a mounted volume (/data or /app).");
+
+    // Auto-create the directory for the DB file (e.g., /data)
+    try
+    {
+        var csb = new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder(cs);
+        var dbPath = csb.DataSource;
+        if (!Path.IsPathRooted(dbPath)) dbPath = Path.GetFullPath(dbPath);
+        var dir = Path.GetDirectoryName(dbPath);
+        if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+    }
+    catch
+    {
+        // best-effort; don't block startup if parsing fails
+    }
 }
 
 var app = builder.Build();
