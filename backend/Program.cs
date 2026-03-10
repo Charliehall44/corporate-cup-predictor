@@ -172,7 +172,6 @@ app.MapPost("/api/entries", async (EntryDto entryDto, AppDbContext db) =>
         TotalGoals = entryDto.TotalGoals,
         MensTopScorer = entryDto.MensTopScorer,
         MixedTopScorer = entryDto.MixedTopScorer,
-        DonationScreenshot = entryDto.DonationScreenshot,
         SubmittedAt = DateTime.UtcNow
     };
 
