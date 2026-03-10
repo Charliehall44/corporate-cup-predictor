@@ -26,7 +26,4 @@ public class EntryDto
     [Required(ErrorMessage = "Mixed top scorer is required")]
     [MaxLength(200, ErrorMessage = "Mixed top scorer must be less than 200 characters")]
     public string MixedTopScorer { get; set; } = string.Empty;
-
-    [Required(ErrorMessage = "Donation screenshot is required")]
-    public string DonationScreenshot { get; set; } = string.Empty;
 }
