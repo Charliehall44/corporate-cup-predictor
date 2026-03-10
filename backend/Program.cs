@@ -1,14 +1,22 @@
 // Corporate Cup Predictor API
-// .NET 8.0 Web API with SQLite database
+// .NET 8 Web API + SPA hosting from /backend/wwwroot
 
-using Microsoft.AspNetCore.OpenApi;                  // enables .WithOpenApi() on Minimal APIs
+using System;
+using System.IO;
+using System.Linq;
+using System.Collections.Generic;
+using Microsoft.AspNetCore.OpenApi;                 // enables .WithOpenApi() on Minimal APIs
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.FileProviders;
-using CorporateCupPredictor;
+using CorporateCupPredictor;                       // your DbContext + models
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container
+// ---------------------------
+// Services
+// ---------------------------
+
+// Swagger / OpenAPI (for docs at /swagger)
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
@@ -20,61 +28,93 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
-// Configure CORS - Allow all origins, methods, headers, and credentials for development
+// CORS (broad for now; can be restricted later)
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
     {
-        policy.SetIsOriginAllowed(_ => true) // Allow any origin in development
+        policy.SetIsOriginAllowed(_ => true)
               .AllowAnyMethod()
               .AllowAnyHeader()
-              .AllowCredentials(); // Required for proxy authentication
+              .AllowCredentials();
     });
 });
 
-// Add SQLite database
+// SQLite DbContext
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection")
         ?? "Data Source=corporatecup.db"));
 
 var app = builder.Build();
 
-// Ensure database is created
+// ---------------------------
+// One‑time DB ensure
+// ---------------------------
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     db.Database.EnsureCreated();
 }
 
-// Configure the HTTP request pipeline
+// ---------------------------
+// Swagger (always available; UI at /swagger)
+// ---------------------------
 app.UseSwagger();
-app.UseSwaggerUI(c =>
+app.UseSwaggerUI(ui =>
 {
-    c.SwaggerEndpoint("/swagger/v1/swagger.json", "Corporate Cup Predictor API v1");
-    c.RoutePrefix = "swagger";
+    ui.SwaggerEndpoint("/swagger/v1/swagger.json", "Corporate Cup Predictor API v1");
+    ui.RoutePrefix = "swagger";
 });
 
-// IMPORTANT: UseCors must come before UseAuthorization (if used)
+// ---------------------------
+// CORS (before any endpoints that need it)
+// ---------------------------
 app.UseCors();
 
-// Serve static files from frontend/dist copied to wwwroot (for Railway deployment)
-var frontendPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
-if (Directory.Exists(frontendPath))
+// ---------------------------
+// Static files + SPA fallback (serve React from wwwroot)
+// ---------------------------
+var env = app.Environment;
+
+// Ensure WebRootPath is set to "wwwroot" beside the app (publish-safe)
+if (string.IsNullOrWhiteSpace(env.WebRootPath))
 {
-    app.UseStaticFiles(new StaticFileOptions
-    {
-        FileProvider = new PhysicalFileProvider(frontendPath),
-        RequestPath = ""
-    });
+    env.WebRootPath = Path.Combine(env.ContentRootPath, "wwwroot");
 }
 
-// Health check endpoint
-app.MapGet("/api/health", () => Results.Ok(new { status = "healthy", timestamp = DateTime.UtcNow }))
-    .WithName("HealthCheck")
-    .WithTags("Health")
-    .WithOpenApi();
+// Serve static files (if present)
+app.UseStaticFiles(new StaticFileOptions
+{
+    FileProvider = new PhysicalFileProvider(env.WebRootPath),
+    RequestPath = ""
+});
 
-// GET: Get all entries
+// If SPA exists, use it at '/' and fallback anything non-API/non-static to index.html.
+// Otherwise, keep '/' redirecting to Swagger.
+var spaIndex = Path.Combine(env.WebRootPath, "index.html");
+if (File.Exists(spaIndex))
+{
+    // Any unmatched route goes to React index.html
+    app.MapFallbackToFile("index.html");
+}
+else
+{
+    // SPA not published—leave the root landing on Swagger
+    app.MapGet("/", () => Results.Redirect("/swagger"))
+       .ExcludeFromDescription();
+}
+
+// ---------------------------
+// Minimal API endpoints
+// ---------------------------
+
+// Health
+app.MapGet("/api/health", () => Results.Ok(new { status = "healthy", timestamp = DateTime.UtcNow }))
+   .WithName("HealthCheck")
+   .WithTags("Health")
+   .WithOpenApi();
+
+// Entries: list all
 app.MapGet("/api/entries", async (AppDbContext db) =>
 {
     var entries = await db.Entries
@@ -87,41 +127,37 @@ app.MapGet("/api/entries", async (AppDbContext db) =>
 .WithTags("Entries")
 .WithOpenApi();
 
-// GET: Get entry by ID
-app.MapGet("/api/entries/{id}", async (int id, AppDbContext db) =>
+// Entries: get by id
+app.MapGet("/api/entries/{id:int}", async (int id, AppDbContext db) =>
 {
     var entry = await db.Entries.FindAsync(id);
-
-    if (entry == null)
-    {
-        return Results.NotFound(new { message = "Entry not found" });
-    }
-
-    return Results.Ok(entry);
+    return entry is null
+        ? Results.NotFound(new { message = "Entry not found" })
+        : Results.Ok(entry);
 })
 .WithName("GetEntryById")
 .WithTags("Entries")
 .WithOpenApi();
 
-// POST: Create new entry
+// Entries: create
 app.MapPost("/api/entries", async (EntryDto entryDto, AppDbContext db) =>
 {
-    // Validate the DTO
-    var validationResults = new List<System.ComponentModel.DataAnnotations.ValidationResult>();
-    var validationContext = new System.ComponentModel.DataAnnotations.ValidationContext(entryDto);
+    // Validate DTO (DataAnnotations)
+    var results = new List<System.ComponentModel.DataAnnotations.ValidationResult>();
+    var context = new System.ComponentModel.DataAnnotations.ValidationContext(entryDto);
 
-    if (!System.ComponentModel.DataAnnotations.Validator.TryValidateObject(
-        entryDto, validationContext, validationResults, true))
+    if (!System.ComponentModel.DataAnnotations.Validator
+        .TryValidateObject(entryDto, context, results, validateAllProperties: true))
     {
-        var errors = validationResults.Select(r => r.ErrorMessage).ToList();
+        var errors = results.Select(r => r.ErrorMessage).ToList();
         return Results.BadRequest(new { message = "Validation failed", errors });
     }
 
-    // Check if email already exists
-    var existingEntry = await db.Entries
-        .FirstOrDefaultAsync(e => e.Email.ToLower() == entryDto.Email.ToLower());
+    // Duplicate email check
+    var exists = await db.Entries
+        .AnyAsync(e => e.Email.ToLower() == entryDto.Email.ToLower());
 
-    if (existingEntry != null)
+    if (exists)
     {
         return Results.BadRequest(new
         {
@@ -129,7 +165,6 @@ app.MapPost("/api/entries", async (EntryDto entryDto, AppDbContext db) =>
         });
     }
 
-    // Create new entry
     var entry = new Entry
     {
         Name = entryDto.Name,
@@ -150,7 +185,7 @@ app.MapPost("/api/entries", async (EntryDto entryDto, AppDbContext db) =>
 .WithTags("Entries")
 .WithOpenApi();
 
-// GET: Get statistics
+// Stats
 app.MapGet("/api/statistics", async (AppDbContext db) =>
 {
     var entries = await db.Entries.ToListAsync();
@@ -169,37 +204,32 @@ app.MapGet("/api/statistics", async (AppDbContext db) =>
     var totalGoals = entries.Sum(e => e.TotalGoals);
     var averageGoals = Math.Round((double)totalGoals / entries.Count, 2);
 
-    var mensScorers = entries
-        .GroupBy(e => e.MensTopScorer)
-        .OrderByDescending(g => g.Count())
-        .FirstOrDefault();
+    var mensTop = entries.GroupBy(e => e.MensTopScorer)
+                         .OrderByDescending(g => g.Count())
+                         .FirstOrDefault();
 
-    var mixedScorers = entries
-        .GroupBy(e => e.MixedTopScorer)
-        .OrderByDescending(g => g.Count())
-        .FirstOrDefault();
+    var mixedTop = entries.GroupBy(e => e.MixedTopScorer)
+                          .OrderByDescending(g => g.Count())
+                          .FirstOrDefault();
 
     return Results.Ok(new
     {
         totalEntries = entries.Count,
         averageGoals,
-        mostPopularMensScorer = mensScorers?.Key ?? "N/A",
-        mostPopularMixedScorer = mixedScorers?.Key ?? "N/A"
+        mostPopularMensScorer = mensTop?.Key ?? "N/A",
+        mostPopularMixedScorer = mixedTop?.Key ?? "N/A"
     });
 })
 .WithName("GetStatistics")
 .WithTags("Statistics")
 .WithOpenApi();
 
-// DELETE: Delete entry by ID (admin only)
-app.MapDelete("/api/entries/{id}", async (int id, AppDbContext db) =>
+// Entries: delete
+app.MapDelete("/api/entries/{id:int}", async (int id, AppDbContext db) =>
 {
     var entry = await db.Entries.FindAsync(id);
-
-    if (entry == null)
-    {
+    if (entry is null)
         return Results.NotFound(new { message = "Entry not found" });
-    }
 
     db.Entries.Remove(entry);
     await db.SaveChangesAsync();
@@ -210,22 +240,7 @@ app.MapDelete("/api/entries/{id}", async (int id, AppDbContext db) =>
 .WithTags("Entries")
 .WithOpenApi();
 
-// Root endpoint - redirect to swagger if frontend not available
-var frontendIndexPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot/index.html");
-if (File.Exists(frontendIndexPath))
-{
-    // SPA fallback - serve index.html for all non-API routes
-    app.MapFallbackToFile("index.html", new StaticFileOptions
-    {
-        FileProvider = new PhysicalFileProvider(
-            Path.Combine(Directory.GetCurrentDirectory(), "wwwroot"))
-    });
-}
-else
-{
-    // If frontend not built, redirect to swagger
-    app.MapGet("/", () => Results.Redirect("/swagger"))
-        .ExcludeFromDescription();
-}
-
+// ---------------------------
+// Run
+// ---------------------------
 app.Run();
