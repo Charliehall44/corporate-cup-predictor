@@ -174,7 +174,7 @@ function App() {
       </main>
 
       <footer className="app-footer">
-        RAISING FUNDS FOR <span className="footer-heart">♥</span> HEARTBEAT OF FOOTBALL • THE ACCESS GROUP 2025
+        RAISING FUNDS FOR <span className="footer-heart">♥</span> HEARTBEAT OF FOOTBALL • THE ACCESS GROUP 2026
       </footer>
 
       {/* Admin trigger - triple tap bottom right corner */}
