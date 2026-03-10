@@ -30,7 +30,6 @@ public class Entry
     [MaxLength(200)]
     public string MixedTopScorer { get; set; } = string.Empty;
 
-    [Required]
     public string DonationScreenshot { get; set; } = string.Empty; // Base64 encoded image
 
     public DateTime SubmittedAt { get; set; } = DateTime.UtcNow;
