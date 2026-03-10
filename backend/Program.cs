@@ -1,6 +1,7 @@
 // Corporate Cup Predictor API
-// .NET 10.0 Web API with SQLite database
+// .NET 8.0 Web API with SQLite database
 
+using Microsoft.AspNetCore.OpenApi;                  // enables .WithOpenApi() on Minimal APIs
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.FileProviders;
 using CorporateCupPredictor;
@@ -11,8 +12,9 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
-    c.SwaggerDoc("v1", new() { 
-        Title = "Corporate Cup Predictor API", 
+    c.SwaggerDoc("v1", new()
+    {
+        Title = "Corporate Cup Predictor API",
         Version = "v1",
         Description = "API for Corporate Cup 2026 predictions and donations"
     });
@@ -32,7 +34,7 @@ builder.Services.AddCors(options =>
 
 // Add SQLite database
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection") 
+    options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection")
         ?? "Data Source=corporatecup.db"));
 
 var app = builder.Build();
@@ -52,10 +54,10 @@ app.UseSwaggerUI(c =>
     c.RoutePrefix = "swagger";
 });
 
-// IMPORTANT: UseCors must come before UseAuthorization
+// IMPORTANT: UseCors must come before UseAuthorization (if used)
 app.UseCors();
 
-// Serve static files from frontend/dist (for Railway deployment)
+// Serve static files from frontend/dist copied to wwwroot (for Railway deployment)
 var frontendPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
 if (Directory.Exists(frontendPath))
 {
@@ -78,7 +80,7 @@ app.MapGet("/api/entries", async (AppDbContext db) =>
     var entries = await db.Entries
         .OrderByDescending(e => e.SubmittedAt)
         .ToListAsync();
-    
+
     return Results.Ok(entries);
 })
 .WithName("GetAllEntries")
@@ -89,12 +91,12 @@ app.MapGet("/api/entries", async (AppDbContext db) =>
 app.MapGet("/api/entries/{id}", async (int id, AppDbContext db) =>
 {
     var entry = await db.Entries.FindAsync(id);
-    
+
     if (entry == null)
     {
         return Results.NotFound(new { message = "Entry not found" });
     }
-    
+
     return Results.Ok(entry);
 })
 .WithName("GetEntryById")
@@ -107,7 +109,7 @@ app.MapPost("/api/entries", async (EntryDto entryDto, AppDbContext db) =>
     // Validate the DTO
     var validationResults = new List<System.ComponentModel.DataAnnotations.ValidationResult>();
     var validationContext = new System.ComponentModel.DataAnnotations.ValidationContext(entryDto);
-    
+
     if (!System.ComponentModel.DataAnnotations.Validator.TryValidateObject(
         entryDto, validationContext, validationResults, true))
     {
@@ -118,11 +120,12 @@ app.MapPost("/api/entries", async (EntryDto entryDto, AppDbContext db) =>
     // Check if email already exists
     var existingEntry = await db.Entries
         .FirstOrDefaultAsync(e => e.Email.ToLower() == entryDto.Email.ToLower());
-    
+
     if (existingEntry != null)
     {
-        return Results.BadRequest(new { 
-            message = "An entry with this email already exists. Each person can only submit one entry." 
+        return Results.BadRequest(new
+        {
+            message = "An entry with this email already exists. Each person can only submit one entry."
         });
     }
 
@@ -151,7 +154,7 @@ app.MapPost("/api/entries", async (EntryDto entryDto, AppDbContext db) =>
 app.MapGet("/api/statistics", async (AppDbContext db) =>
 {
     var entries = await db.Entries.ToListAsync();
-    
+
     if (entries.Count == 0)
     {
         return Results.Ok(new
@@ -192,7 +195,7 @@ app.MapGet("/api/statistics", async (AppDbContext db) =>
 app.MapDelete("/api/entries/{id}", async (int id, AppDbContext db) =>
 {
     var entry = await db.Entries.FindAsync(id);
-    
+
     if (entry == null)
     {
         return Results.NotFound(new { message = "Entry not found" });
@@ -226,3 +229,4 @@ else
 }
 
 app.Run();
+``
