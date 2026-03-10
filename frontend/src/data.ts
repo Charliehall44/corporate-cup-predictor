@@ -26,7 +26,7 @@ export const MENS_TEAM: Team = {
     { id: 'mens-7', name: 'Rob Baxter' },
     { id: 'mens-8', name: 'Kerry Agiasotis' },
     { id: 'mens-9', name: 'Ryan Forde' },
-    { id: 'mens-10', name: 'Ben Keegan' },
+    { id: 'mens-10', name: 'Brian Keegan' },
   ],
 };
 
