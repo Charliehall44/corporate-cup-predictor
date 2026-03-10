@@ -1,0 +1,17 @@
+[phases.setup]
+nixPkgs = ["nodejs", "dotnet-sdk_8"]
+
+[phases.install]
+cmds = [
+  "cd frontend && npm ci",
+  "cd backend && dotnet restore"
+]
+
+[phases.build]
+cmds = [
+  "cd frontend && npm run build",
+  "cd backend && dotnet publish -c Release -o out"
+]
+
+[start]
+cmd = "cd backend && dotnet out/CorporateCupPredictor.dll"
