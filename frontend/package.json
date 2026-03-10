@@ -6,6 +6,12 @@
     "friendlyName": "Corporate Cup Predictor"
   },
   "type": "module",
+
+  "engines": {
+    "node": ">=20 <21",
+    "npm": ">=9"
+  },
+
   "scripts": {
     "dev": "vite",
     "build": "tsc -b || true && vite build",
@@ -82,3 +88,4 @@
     "tw-animate-css": "^1.3.5"
   }
 }
+``
