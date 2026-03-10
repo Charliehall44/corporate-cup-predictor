@@ -38,7 +38,7 @@ export const Success: React.FC<SuccessProps> = ({
       
       <p className="success-message">
         Thanks for supporting Heartbeat of Football! Your prediction has been recorded. 
-        We'll announce the winner after the tournament on March 20, 2025. Good luck! 🏆
+        We'll announce the winner after the tournament on March 20, 2026. Good luck! 🏆
       </p>
 
       <div className="summary-card">
