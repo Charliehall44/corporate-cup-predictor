@@ -7,7 +7,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- EF Core 8.x to match net8.0 -->
+    <!-- EF Core 8.x -->
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="8.0.18" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="8.0.18" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.18">
@@ -15,7 +15,10 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
 
-    <!-- Swagger / OpenAPI: leave as-is -->
+    <!-- Minimal APIs OpenAPI extensions for .NET 8 (enables .WithOpenApi) -->
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.8" />
+
+    <!-- Swagger UI (Swashbuckle) -->
     <PackageReference Include="Swashbuckle.AspNetCore" Version="7.2.0" />
   </ItemGroup>
 
